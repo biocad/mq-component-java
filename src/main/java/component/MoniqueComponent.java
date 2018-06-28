@@ -204,7 +204,8 @@ public abstract class MoniqueComponent {
                 }
             }));
 
-            if (config.getDeploy().getMonique().getController() != null) {
+            if (config.getDeploy().getMonique().getController() != null &&
+                    config.getParam().getPort() != null) {
                 communicationThreads.add(new Thread(() -> {
                     try (ZContext context = new ZContext()) {
                         ZMQ.Socket messageSender = context.createSocket(ZMQ.PULL);
