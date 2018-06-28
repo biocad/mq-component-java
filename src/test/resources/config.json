@@ -1,0 +1,24 @@
+{
+  "deploy": {
+    "monique": {
+      "scheduler-in": {
+        "host": "127.0.0.1",
+        "comport": 9000,
+        "techport": 9024
+      },
+      "scheduler-out": {
+        "host": "127.0.0.1",
+        "comport": 9001,
+        "techport": 9025
+      },
+      "controller": {
+        "host": "127.0.0.1"
+      }
+    }
+  },
+  "params": {
+    "name": "simple-data-java",
+    "creator": "0000-0000-0000-simple-data-java",
+    "frequency": 60000
+  }
+}
