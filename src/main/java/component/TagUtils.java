@@ -21,8 +21,12 @@ public class TagUtils {
      * @return message tag
      */
     static String createMessageTag(MoniqueMessage moniqueMessage) {
-        return String.join(DELIMETER, moniqueMessage.getType(),
-                moniqueMessage.getSpec(), moniqueMessage.getId(), moniqueMessage.getPid(), moniqueMessage.getCreator());
+        return String.join(DELIMETER,
+                moniqueMessage.getType(),
+                moniqueMessage.getSpec(),
+                moniqueMessage.getId(),
+                moniqueMessage.getPid(),
+                moniqueMessage.getCreator());
     }
 
     /**

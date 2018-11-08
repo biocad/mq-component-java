@@ -17,6 +17,7 @@ import protocol.MoniqueMessage;
 import protocol.MoniqueTaggedMessage;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -182,7 +183,7 @@ public abstract class MoniqueComponent {
                         ZMsg zMsg = ZMsg.recvMsg(messageSub);
                         ZFrame tagFrame = zMsg.getFirst();
                         try {
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
+                            String tag = getStringFromBytes(tagFrame.getData());
                             if (specifications.contains(getTagPart(tag, TagPart.SPEC))) {
                                 ZFrame messageFrame = zMsg.getLast();
                                 incoming.add(new MoniqueTaggedMessage(
@@ -226,7 +227,7 @@ public abstract class MoniqueComponent {
         while (!Thread.currentThread().isInterrupted()) {
             try {
                 MoniqueMessage out = outgoing.take();
-                socket.sendMore(objectToMessagePack(createMessageTag(out)));
+                socket.sendMore(createMessageTag(out).getBytes(StandardCharsets.UTF_8));
                 socket.send(objectToMessagePack(out));
             } catch (InterruptedException e) {
                 log.info("Communication thread was interrupted");
@@ -262,7 +263,7 @@ public abstract class MoniqueComponent {
                             String pid = error.getTaskId() != null ? error.getTaskId() : "";
                             MoniqueMessage message = new MoniqueMessage(pid, UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, ERROR, JSON_TYPE, ERROR, objectToByteArray(error));
-                            errSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            errSender.sendMore(createMessageTag(message).getBytes(StandardCharsets.UTF_8));
                             errSender.send(objectToMessagePack(message));
                         } catch (InterruptedException e) {
                             log.info("Error thread was interrupted");
@@ -301,12 +302,12 @@ public abstract class MoniqueComponent {
                         try {
                             ZMsg zMsg = ZMsg.recvMsg(techSub);
                             ZFrame tagFrame = zMsg.getFirst();
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
+                            String tag = getStringFromBytes(tagFrame.getData());
                             if (CONFIG.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.TYPE)) &&
                                     KILL.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.SPEC))) {
                                 restartCommunication = true;
                             }
-                        } catch (IOException | InvalidValueException e) {
+                        } catch (InvalidValueException e) {
                             log.error("An error occurred while receiving technical message from MoniQue: " + e.getCause());
                             errorQueue.add(new IdentifiedMoniqueError(
                                     new MoniqueError(TECHNICAL_ERROR.getCode(), e.getMessage())));
@@ -343,7 +344,7 @@ public abstract class MoniqueComponent {
                                     isCommunicationAlive, "");
                             MoniqueMessage message = new MoniqueMessage("", UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, MONITORING, JSON_TYPE, DATA, Converter.objectToByteArray(monitoring));
-                            monitoringSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            monitoringSender.sendMore(createMessageTag(message).getBytes(StandardCharsets.UTF_8));
                             monitoringSender.send(objectToMessagePack(message));
                             Thread.sleep(config.getParam().getFrequency());
                         } catch (InterruptedException e) {
