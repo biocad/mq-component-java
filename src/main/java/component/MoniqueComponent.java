@@ -2,6 +2,7 @@ package component;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import exception.InvalidValueException;
+import javafx.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import static component.Constant.*;
@@ -44,7 +46,7 @@ public abstract class MoniqueComponent {
 
     private static final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
 
-    private static final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<Pair<MoniqueMessage, CompletableFuture<Boolean>>> outgoing = new LinkedBlockingQueue<>();
 
     private static final List<Thread> communicationThreads = new ArrayList<>();
 
@@ -106,7 +108,14 @@ public abstract class MoniqueComponent {
      * Push message to outgoing queue
      */
     protected static void sendMoniqueMessage(MoniqueMessage message) {
-        outgoing.add(message);
+        outgoing.add(new Pair<>(message, null));
+    }
+
+    /**
+     * Push message and future to outgoing queue
+     */
+    protected static void sendMoniqueMessage(MoniqueMessage message, CompletableFuture<Boolean> future) {
+        outgoing.add(new Pair<>(message, future));
     }
 
     /**
@@ -225,14 +234,22 @@ public abstract class MoniqueComponent {
 
     private void processIncomingMessage(ZMQ.Socket socket) {
         while (!Thread.currentThread().isInterrupted()) {
+            CompletableFuture<Boolean> currentFeature = null;
             try {
-                MoniqueMessage out = outgoing.take();
-                socket.sendMore(createMessageTag(out).getBytes(StandardCharsets.UTF_8));
-                socket.send(objectToMessagePack(out));
+                Pair<MoniqueMessage, CompletableFuture<Boolean>> outPair = outgoing.take();
+                currentFeature = outPair.getValue();
+                socket.sendMore(createMessageTag(outPair.getKey()).getBytes(StandardCharsets.UTF_8));
+                boolean isSent = socket.send(objectToMessagePack(outPair.getKey()));
+                if (currentFeature != null) {
+                    currentFeature.complete(isSent);
+                }
             } catch (InterruptedException e) {
-                log.info("Communication thread was interrupted");
+                log.info("Communication thrad was interrupted");
                 break;
             } catch (Exception e) {
+                if (currentFeature != null) {
+                    currentFeature.complete(false);
+                }
                 log.error("An error occurred in Communication thread: " + e.getCause());
             }
         }
