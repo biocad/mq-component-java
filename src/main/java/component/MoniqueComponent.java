@@ -2,11 +2,11 @@ package component;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import exception.InvalidValueException;
-import javafx.util.Pair;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.zeromq.ZContext;
@@ -109,14 +109,14 @@ public abstract class MoniqueComponent {
      * Push message to outgoing queue
      */
     protected static void sendMoniqueMessage(MoniqueMessage message) {
-        outgoing.add(new Pair<>(message, null));
+        outgoing.add(Pair.of(message, null));
     }
 
     /**
      * Push message and future to outgoing queue
      */
     protected static void sendMoniqueMessage(MoniqueMessage message, CompletableFuture<Boolean> future) {
-        outgoing.add(new Pair<>(message, future));
+        outgoing.add(Pair.of(message, future));
     }
 
     /**
