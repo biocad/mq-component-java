@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static component.Constant.*;
 import static component.Converter.*;
@@ -132,6 +133,10 @@ public abstract class MoniqueComponent {
      */
     protected static MoniqueTaggedMessage receiveMessage() throws InterruptedException {
         return incoming.take();
+    }
+
+    protected static MoniqueTaggedMessage tryReceiveMessage(int time, TimeUnit unit) throws InterruptedException {
+        return incoming.poll(time, unit);
     }
 
     private void setConfig() {
