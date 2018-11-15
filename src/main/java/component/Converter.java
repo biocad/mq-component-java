@@ -8,13 +8,14 @@ import org.msgpack.jackson.dataformat.MessagePackFactory;
 import org.msgpack.value.Variable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
-* Utility class
-* Provides methods to convert different types of data
-*
-* @author Pavel Didkovskii
-*/
+ * Utility class
+ * Provides methods to convert different types of data
+ *
+ * @author Pavel Didkovskii
+ */
 public class Converter {
 
     public static byte[] objectToByteArray(Object o) throws JsonProcessingException {
@@ -47,6 +48,14 @@ public class Converter {
             return (T) stringFromMessagePack(data);
         }
         return new ObjectMapper(new MessagePackFactory()).readValue(data, clazz);
+    }
+
+    /**
+     * @param data - UTF-8 String converted to byte array
+     * @return - decoded String
+     */
+    static String getStringFromBytes(byte[] data) {
+        return new String(data, StandardCharsets.UTF_8);
     }
 
     private static String stringFromMessagePack(byte[] data) throws IOException {

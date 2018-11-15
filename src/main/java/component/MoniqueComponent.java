@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.zeromq.ZContext;
@@ -17,10 +18,13 @@ import protocol.MoniqueMessage;
 import protocol.MoniqueTaggedMessage;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 
 import static component.Constant.*;
 import static component.Converter.*;
@@ -43,7 +47,7 @@ public abstract class MoniqueComponent {
 
     private static final LinkedBlockingQueue<MoniqueTaggedMessage> incoming = new LinkedBlockingQueue<>();
 
-    private static final LinkedBlockingQueue<MoniqueMessage> outgoing = new LinkedBlockingQueue<>();
+    private static final LinkedBlockingQueue<Pair<MoniqueMessage, CompletableFuture<Boolean>>> outgoing = new LinkedBlockingQueue<>();
 
     private static final List<Thread> communicationThreads = new ArrayList<>();
 
@@ -105,7 +109,14 @@ public abstract class MoniqueComponent {
      * Push message to outgoing queue
      */
     protected static void sendMoniqueMessage(MoniqueMessage message) {
-        outgoing.add(message);
+        outgoing.add(Pair.of(message, null));
+    }
+
+    /**
+     * Push message and future to outgoing queue
+     */
+    protected static void sendMoniqueMessage(MoniqueMessage message, CompletableFuture<Boolean> future) {
+        outgoing.add(Pair.of(message, future));
     }
 
     /**
@@ -122,6 +133,10 @@ public abstract class MoniqueComponent {
      */
     protected static MoniqueTaggedMessage receiveMessage() throws InterruptedException {
         return incoming.take();
+    }
+
+    protected static MoniqueTaggedMessage tryReceiveMessage(int time, TimeUnit unit) throws InterruptedException {
+        return incoming.poll(time, unit);
     }
 
     private void setConfig() {
@@ -182,7 +197,7 @@ public abstract class MoniqueComponent {
                         ZMsg zMsg = ZMsg.recvMsg(messageSub);
                         ZFrame tagFrame = zMsg.getFirst();
                         try {
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
+                            String tag = getStringFromBytes(tagFrame.getData());
                             if (specifications.contains(getTagPart(tag, TagPart.SPEC))) {
                                 ZFrame messageFrame = zMsg.getLast();
                                 incoming.add(new MoniqueTaggedMessage(
@@ -224,14 +239,22 @@ public abstract class MoniqueComponent {
 
     private void processIncomingMessage(ZMQ.Socket socket) {
         while (!Thread.currentThread().isInterrupted()) {
+            CompletableFuture<Boolean> currentFeature = null;
             try {
-                MoniqueMessage out = outgoing.take();
-                socket.sendMore(objectToMessagePack(createMessageTag(out)));
-                socket.send(objectToMessagePack(out));
+                Pair<MoniqueMessage, CompletableFuture<Boolean>> outPair = outgoing.take();
+                currentFeature = outPair.getValue();
+                socket.sendMore(createMessageTag(outPair.getKey()).getBytes(StandardCharsets.UTF_8));
+                boolean isSent = socket.send(objectToMessagePack(outPair.getKey()));
+                if (currentFeature != null) {
+                    currentFeature.complete(isSent);
+                }
             } catch (InterruptedException e) {
-                log.info("Communication thread was interrupted");
+                log.info("Communication thrad was interrupted");
                 break;
             } catch (Exception e) {
+                if (currentFeature != null) {
+                    currentFeature.complete(false);
+                }
                 log.error("An error occurred in Communication thread: " + e.getCause());
             }
         }
@@ -262,7 +285,7 @@ public abstract class MoniqueComponent {
                             String pid = error.getTaskId() != null ? error.getTaskId() : "";
                             MoniqueMessage message = new MoniqueMessage(pid, UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, ERROR, JSON_TYPE, ERROR, objectToByteArray(error));
-                            errSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            errSender.sendMore(createMessageTag(message).getBytes(StandardCharsets.UTF_8));
                             errSender.send(objectToMessagePack(message));
                         } catch (InterruptedException e) {
                             log.info("Error thread was interrupted");
@@ -301,12 +324,12 @@ public abstract class MoniqueComponent {
                         try {
                             ZMsg zMsg = ZMsg.recvMsg(techSub);
                             ZFrame tagFrame = zMsg.getFirst();
-                            String tag = objectFromMessagePack(tagFrame.getData(), String.class);
+                            String tag = getStringFromBytes(tagFrame.getData());
                             if (CONFIG.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.TYPE)) &&
                                     KILL.equals(TagUtils.getTagPart(tag, TagUtils.TagPart.SPEC))) {
                                 restartCommunication = true;
                             }
-                        } catch (IOException | InvalidValueException e) {
+                        } catch (InvalidValueException e) {
                             log.error("An error occurred while receiving technical message from MoniQue: " + e.getCause());
                             errorQueue.add(new IdentifiedMoniqueError(
                                     new MoniqueError(TECHNICAL_ERROR.getCode(), e.getMessage())));
@@ -343,7 +366,7 @@ public abstract class MoniqueComponent {
                                     isCommunicationAlive, "");
                             MoniqueMessage message = new MoniqueMessage("", UUID.randomUUID().toString(),
                                     NEVER_EXPIRES, MONITORING, JSON_TYPE, DATA, Converter.objectToByteArray(monitoring));
-                            monitoringSender.sendMore(objectToMessagePack(createMessageTag(message)));
+                            monitoringSender.sendMore(createMessageTag(message).getBytes(StandardCharsets.UTF_8));
                             monitoringSender.send(objectToMessagePack(message));
                             Thread.sleep(config.getParam().getFrequency());
                         } catch (InterruptedException e) {
